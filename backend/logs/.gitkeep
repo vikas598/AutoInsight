@@ -1,0 +1,2 @@
+# Keep this directory in version control.
+# The audit.jsonl file written at runtime is .gitignore'd elsewhere.
