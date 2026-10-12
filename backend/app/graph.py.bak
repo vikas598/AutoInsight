@@ -1,0 +1,150 @@
+"""
+AutoInsight — LangGraph StateGraph  (approval handling consolidated in wait_approval)
+=====================================================================================
+Wires the three agent nodes together via conditional edges.
+
+Topology:
+
+    START
+      ↓
+    supervisor ──┬──→ sql_agent ───┬──→ wait_approval ──→ respond ──→ END
+                 │                 │        (handles both approved + rejected inline)
+                 ├──→ ml_agent  ───┤
+                 │                 ↓
+                 └──→ respond    END
+                       ↓
+                      END
+
+Design note on this file vs the earlier version:
+  Previously, approval handling lived in sql_agent's _handle_approval and was
+  reached via route_after_approval → sql_agent. That path was brittle (routing
+  module caching bit us). This version moves the handling INTO wait_approval
+  itself. The node reads approval_status, calls _handle_approval directly, and
+  returns the merged state update. The route_after_approval function becomes a
+  trivial "→ respond" edge. One less moving part.
+"""
+
+from __future__ import annotations
+
+from langgraph.checkpoint.memory import MemorySaver
+from langgraph.graph import END, START, StateGraph
+
+from app.agents import ml_agent_node, sql_agent_node, supervisor_node
+from app.agents.sql_agent import _handle_approval       # consolidated inline
+from app.routing import route_after_agent, route_from_supervisor
+from app.state import AutoInsightState
+
+
+# ---------------------------------------------------------------------------
+# respond node — terminal, pass-through
+# ---------------------------------------------------------------------------
+def respond_node(state: AutoInsightState) -> dict:
+    """Terminal node — the response is already in state."""
+    return {"response": state.get("response") or "No response generated."}
+
+
+# ---------------------------------------------------------------------------
+# wait_approval node — now does real work
+# ---------------------------------------------------------------------------
+def wait_approval_node(state: AutoInsightState) -> dict:
+    """
+    Resume point for the approval interrupt.
+
+    LangGraph pauses BEFORE this node (interrupt_before=["wait_approval"]),
+    the frontend posts the decision via graph.update_state(), then the client
+    calls graph.invoke(None, config) to resume. At that point this function
+    runs with the updated approval_status.
+
+    We call _handle_approval() directly, which:
+      * on "approved" → pipeline.execute() + audit + narrative
+      * on "rejected" → pipeline.reject() + audit + rejection message
+
+    The returned dict is merged into state so the downstream respond node
+    sees the final values.
+    """
+    status = state.get("approval_status")
+    if status in ("approved", "rejected"):
+        return _handle_approval(state)
+    # No decision set — shouldn't happen if the frontend called update_state
+    return {}
+
+
+# ---------------------------------------------------------------------------
+# Trivial post-approval router — just send to respond
+# ---------------------------------------------------------------------------
+def _after_wait_approval(_state: AutoInsightState) -> str:
+    return "respond"
+
+
+# ---------------------------------------------------------------------------
+# Graph builder
+# ---------------------------------------------------------------------------
+def build_graph(checkpointer=None):
+    workflow = StateGraph(AutoInsightState)
+
+    # Register nodes
+    workflow.add_node("supervisor",    supervisor_node)
+    workflow.add_node("sql_agent",     sql_agent_node)
+    workflow.add_node("ml_agent",      ml_agent_node)
+    workflow.add_node("wait_approval", wait_approval_node)
+    workflow.add_node("respond",       respond_node)
+
+    # Entry
+    workflow.add_edge(START, "supervisor")
+
+    # Supervisor → agents / respond
+    workflow.add_conditional_edges(
+        "supervisor",
+        route_from_supervisor,
+        {
+            "sql_agent": "sql_agent",
+            "ml_agent":  "ml_agent",
+            "respond":   "respond",
+            END:         END,
+        },
+    )
+
+    # SQL agent → wait_approval / supervisor (retry) / respond
+    workflow.add_conditional_edges(
+        "sql_agent",
+        route_after_agent,
+        {
+            "supervisor":    "supervisor",
+            "wait_approval": "wait_approval",
+            "respond":       "respond",
+            END:             END,
+        },
+    )
+
+    # ML agent → supervisor (retry) / respond
+    workflow.add_conditional_edges(
+        "ml_agent",
+        route_after_agent,
+        {
+            "supervisor":    "supervisor",
+            "wait_approval": "wait_approval",   # unused but valid
+            "respond":       "respond",
+            END:             END,
+        },
+    )
+
+    # wait_approval → respond   (approval handling already done inline)
+    workflow.add_conditional_edges(
+        "wait_approval",
+        _after_wait_approval,
+        {"respond": "respond"},
+    )
+
+    # Terminal
+    workflow.add_edge("respond", END)
+
+    # Compile with interrupt point
+    checkpointer = checkpointer or MemorySaver()
+    return workflow.compile(
+        checkpointer=checkpointer,
+        interrupt_before=["wait_approval"],
+    )
+
+
+# Module-level singleton for the FastAPI layer to import
+graph = build_graph()

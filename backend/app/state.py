@@ -20,27 +20,24 @@ from typing import Any, Literal, TypedDict
 
 from langchain_core.messages import BaseMessage
 
-# ---------------------------------------------------------------------------
-# Enum-like Literals (TypedDict can't carry Enums without extras)
-# ---------------------------------------------------------------------------
+
 Intent = Literal[
-    "sql_read",       # analytical SELECT query
-    "sql_write",      # INSERT / UPDATE / DELETE  (requires approval)
-    "ml_forecast",    # SARIMA / Prophet
-    "ml_cluster",     # K-Means
-    "ml_anomaly",     # Isolation Forest
-    "clarification",  # question too vague — ask back
-    "unsupported",    # outside scope entirely
+    "sql_read",
+    "sql_write",
+    "ml_forecast",
+    "ml_cluster",
+    "ml_anomaly",
+    "clarification",
+    "unsupported",
 ]
 
 ApprovalStatus = Literal["not_required", "pending", "approved", "rejected"]
 
 
 # ---------------------------------------------------------------------------
-# Nested payload shapes (declared loosely so stubs can return partial data)
+# Nested payload shapes
 # ---------------------------------------------------------------------------
 class SchemaContext(TypedDict, total=False):
-    """Trimmed, LLM-ready snapshot of the DB schema."""
     tables: list[dict[str, Any]]
     relationships: list[dict[str, Any]]
     enum_values: dict[str, list[str]]
@@ -48,7 +45,6 @@ class SchemaContext(TypedDict, total=False):
 
 
 class QueryResult(TypedDict, total=False):
-    """Result of a successful SQL execution."""
     columns: list[str]
     rows: list[list[Any]]
     row_count: int
@@ -57,7 +53,6 @@ class QueryResult(TypedDict, total=False):
 
 
 class MLResult(TypedDict, total=False):
-    """Result of an ML analytics run."""
     technique: Literal["forecast", "cluster", "anomaly"]
     summary: dict[str, Any]
     chart_data: list[dict[str, Any]]
@@ -65,7 +60,6 @@ class MLResult(TypedDict, total=False):
 
 
 class VizConfig(TypedDict, total=False):
-    """Recharts-ready chart spec produced by the Visualization Service."""
     chart_type: Literal["line", "bar", "pie", "scatter", "area", "table"]
     data: list[dict[str, Any]]
     x_key: str
@@ -73,34 +67,49 @@ class VizConfig(TypedDict, total=False):
     title: str
 
 
+class WriteAssessment(TypedDict, total=False):
+    """
+    Serialized SafetyPipeline.Assessment. Carried across the wait_approval
+    interrupt so the agent can reconstruct the write to execute.
+    """
+    sql: str
+    operation: str
+    target_table: str
+    risk_score: int
+    risk_factors: dict[str, int]
+    requires_approval: bool
+    preview_columns: list[str]
+    preview_rows: list[list[Any]]
+    affected_rows: int
+    decision: str
+    error: str | None
+
+
 # ---------------------------------------------------------------------------
 # Main state object
 # ---------------------------------------------------------------------------
 class AutoInsightState(TypedDict, total=False):
-    """
-    The single state object flowing through the LangGraph.
-
-    `total=False` so every field is optional — nodes only set what they touch.
-    """
+    """The single state object flowing through the LangGraph."""
 
     # ---- Conversation ----
-    messages: list[BaseMessage]        # full chat history (user + assistant turns)
-    user_query: str                     # the latest user turn, verbatim
-    session_id: str                     # ties this run to a DB connection
+    messages: list[BaseMessage]
+    user_query: str
+    session_id: str
 
-    # ---- Router outputs (Supervisor) ----
+    # ---- Router outputs ----
     intent: Intent | None
-    plan: list[str]                     # optional step-by-step plan
-    current_step: int                   # which step we're on (0-indexed)
+    plan: list[str]
+    current_step: int
 
     # ---- Schema context ----
     schema_context: SchemaContext
 
     # ---- SQL agent outputs ----
-    sql_query: str                      # the generated SQL (read OR write)
-    query_result: QueryResult           # execution result (read path)
-    risk_score: int                     # 0-100, from Safety Pipeline (write path)
-    preview_result: QueryResult         # dry-run preview (write path)
+    sql_query: str
+    query_result: QueryResult
+    risk_score: int
+    preview_result: QueryResult
+    write_assessment: WriteAssessment     # NEW — carries pipeline Assessment
 
     # ---- ML agent outputs ----
     ml_result: MLResult
@@ -109,13 +118,14 @@ class AutoInsightState(TypedDict, total=False):
     viz_config: VizConfig
 
     # ---- Guard rails ----
-    error: str | None                   # most recent error message, if any
-    retry_count: int                    # how many times we've looped on error
-    requires_approval: bool             # true for writes above risk threshold
-    approval_status: ApprovalStatus     # driven by frontend ApprovalCard
+    error: str | None
+    retry_count: int
+    requires_approval: bool
+    approval_status: ApprovalStatus
+    approved_by: str | None               # NEW — who approved/rejected
 
     # ---- Final response ----
-    response: str                       # narrative text sent back to the user
+    response: str
 
 
 # ---------------------------------------------------------------------------
@@ -135,16 +145,18 @@ def new_state(user_query: str, session_id: str) -> AutoInsightState:
         query_result=QueryResult(),
         risk_score=0,
         preview_result=QueryResult(),
+        write_assessment=WriteAssessment(),
         ml_result=MLResult(),
         viz_config=VizConfig(),
         error=None,
         retry_count=0,
         requires_approval=False,
         approval_status="not_required",
+        approved_by=None,
         response="",
     )
 
 
 # Configuration constants used by the graph & routing
 MAX_RETRIES = 2
-RISK_SCORE_THRESHOLD = 50   # writes with risk >= this need human approval
+RISK_SCORE_THRESHOLD = 50
