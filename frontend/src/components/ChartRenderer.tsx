@@ -304,7 +304,7 @@ function BarView({ config }: { config: ChartConfig }) {
 // ---------------------------------------------------------------------------
 // Forecast — observed history, forecast and the interval band
 // ---------------------------------------------------------------------------
-function ForecastView({ config }: { config: ChartConfig }) {
+function ForecastView({ config, kind }: { config: ChartConfig; kind: ValueKind }) {
   const xKey = config.x_key || "month";
   const data = useMemo<Row[]>(
     () => config.data.map((r) => ({
@@ -320,10 +320,10 @@ function ForecastView({ config }: { config: ChartConfig }) {
     if (!active || !payload?.length) return null;
     const r = payload[0].payload as Row;
     const lines: TipLine[] = [];
-    if (isNumeric(r.actual)) lines.push({ label: "Recorded", value: formatValue(r.actual, "number"), color: C.navy });
-    if (isNumeric(r.forecast)) lines.push({ label: "Forecast", value: formatValue(r.forecast, "number"), color: C.primary });
+    if (isNumeric(r.actual)) lines.push({ label: "Recorded", value: formatValue(r.actual, kind), color: C.navy });
+    if (isNumeric(r.forecast)) lines.push({ label: "Forecast", value: formatValue(r.forecast, kind), color: C.primary });
     if (isNumeric(r.lower) && isNumeric(r.upper)) {
-      lines.push({ label: "Range (80%)", value: `${formatValue(r.lower, "number")} – ${formatValue(r.upper, "number")}` });
+      lines.push({ label: "Range (80%)", value: `${formatValue(r.lower, kind)} – ${formatValue(r.upper, kind)}` });
     }
     return <TooltipBox title={formatValue(label, "date")} lines={lines} />;
   };
@@ -335,7 +335,7 @@ function ForecastView({ config }: { config: ChartConfig }) {
         <XAxis dataKey={xKey} tick={AXIS} tickLine={false} axisLine={{ stroke: C.grid }}
                tickFormatter={(v) => formatCompact(v, "date")} minTickGap={24} />
         <YAxis tick={AXIS} tickLine={false} axisLine={false} width={64}
-               tickFormatter={(v) => formatCompact(v, "number")} />
+               tickFormatter={(v) => formatCompact(v, kind)} />
         <Tooltip content={tip} />
         <Legend wrapperStyle={{ fontSize: 12 }} />
         {hasBand && (
@@ -450,7 +450,11 @@ function PointsView({ config, anomalies }: { config: ChartConfig; anomalies: boo
 
 // ---------------------------------------------------------------------------
 
-export function ChartRenderer({ config: raw }: { config: ChartConfig | null }) {
+export function ChartRenderer({ config: raw, forecastKind = "number" }: {
+  config: ChartConfig | null;
+  /** Unit of forecast values (the chart config doesn't carry it). */
+  forecastKind?: ValueKind;
+}) {
   const config = useMemo(() => (raw ? normalize(raw) : null), [raw]);
   const variant = chartVariant(config);
   if (!config) return null;
@@ -458,7 +462,7 @@ export function ChartRenderer({ config: raw }: { config: ChartConfig | null }) {
     case "kpi":       return <Kpi config={config} />;
     case "line":      return <LineView config={config} />;
     case "bar":       return <BarView config={config} />;
-    case "forecast":  return <ForecastView config={config} />;
+    case "forecast":  return <ForecastView config={config} kind={forecastKind} />;
     case "segments":  return <SegmentsView config={config} />;
     case "anomalies": return <PointsView config={config} anomalies />;
     case "scatter":   return <PointsView config={config} anomalies={false} />;

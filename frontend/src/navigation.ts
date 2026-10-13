@@ -36,7 +36,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
     id: "insights",
     label: "Insights & Forecasts",
     icon: TrendingUp,
-    description: "Forecasts, customer segments and anomalies",
+    description: "Explore historical performance and predictive patterns",
   },
   {
     id: "actions",

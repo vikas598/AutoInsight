@@ -90,6 +90,7 @@ class ChatResponse(BaseModel):
     query_result: Optional[dict] = None
     chart_config: Optional[dict] = None
     assessment: Optional[dict] = None      # populated when status == "needs_approval"
+    ml_result: Optional[dict] = None       # technique, summary, metrics, chart_data — ML intents only
     error: Optional[str] = None
 
 
@@ -279,5 +280,6 @@ def _build_response(session_id: str, state: dict) -> ChatResponse:
         query_result=state.get("query_result"),
         chart_config=chart_config,
         assessment=state.get("write_assessment") if requires_approval else None,
+        ml_result=state.get("ml_result") or None,
         error=error,
     )

@@ -4,16 +4,16 @@ import { useCallback } from "react";
 import { AppShell } from "./components/layout/AppShell";
 import { useAnalystSession } from "./hooks/useAnalystSession";
 import { useHashRoute } from "./hooks/useHashRoute";
+import { useInsights } from "./hooks/useInsights";
 import { useOverview } from "./hooks/useOverview";
 import { getNavItem, type RouteId } from "./navigation";
 import { AnalystActions, AnalystPage } from "./pages/AnalystPage";
+import { InsightsPage } from "./pages/InsightsPage";
 import { OverviewPage } from "./pages/OverviewPage";
 import { PlaceholderPage } from "./pages/PlaceholderPage";
 
 // What each unbuilt destination will provide. Shown on its placeholder page.
-const PLACEHOLDER_SUMMARIES: Record<Exclude<RouteId, "analyst" | "overview">, string> = {
-  insights:
-    "A home for sales forecasts, customer segmentation and anomaly detection. These analyses already run from the AI Analyst; ask it to forecast sales or find anomalies.",
+const PLACEHOLDER_SUMMARIES: Record<Exclude<RouteId, "analyst" | "overview" | "insights">, string> = {
   actions:
     "Review data changes awaiting approval and browse the audit trail of every write the system has made.",
   data:
@@ -23,8 +23,10 @@ const PLACEHOLDER_SUMMARIES: Record<Exclude<RouteId, "analyst" | "overview">, st
 export default function App() {
   const [route, navigate] = useHashRoute();
   const analyst = useAnalystSession();
-  // Loads on first visit to Overview, then keeps its data across navigation
-  const overview = useOverview(route === "overview");
+  // Loads on first visit to Overview or Insights (which shows the dataset's
+  // date range), then keeps its data across navigation
+  const overview = useOverview(route === "overview" || route === "insights");
+  const insights = useInsights();
 
   /** Open the AI Analyst with a question: run it now, or — if the analyst
    *  is busy or awaiting an approval — leave it in the input box. */
@@ -44,6 +46,8 @@ export default function App() {
         <AnalystPage session={analyst} />
       ) : route === "overview" ? (
         <OverviewPage state={overview} onAsk={askAnalyst} />
+      ) : route === "insights" ? (
+        <InsightsPage state={insights} dataset={overview} onAsk={askAnalyst} />
       ) : (
         <PlaceholderPage
           item={getNavItem(route)}

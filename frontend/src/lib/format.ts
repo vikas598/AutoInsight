@@ -72,6 +72,7 @@ export function formatValue(v: unknown, kind: ValueKind): string {
 /** Compact value for chart axes: ₹12.5L, ₹1.2Cr, 3.4K. */
 export function formatCompact(v: unknown, kind: ValueKind): string {
   if (!isNumeric(v)) return typeof v === "string" && kind === "date" ? formatDate(v) : String(v ?? "");
+  if (kind === "currency" && v < 0) return `−${formatCompact(-v, kind)}`;
   if (kind === "percent" || kind === "ratio") return percent(v, kind);
   const abs = Math.abs(v);
   const prefix = kind === "currency" ? "₹" : "";
@@ -98,6 +99,7 @@ export function plural(n: number, word: string): string {
 
 /** Headline INR value in Indian units: ₹36.06 Cr, ₹12.02 L, ₹48,500. */
 export function formatINRShort(v: number): string {
+  if (v < 0) return `−${formatINRShort(-v)}`;           // "−₹22.82 L", not "₹-22.82 L"
   const abs = Math.abs(v);
   const two = (x: number) => x.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   if (abs >= 1e7) return `₹${two(v / 1e7)} Cr`;

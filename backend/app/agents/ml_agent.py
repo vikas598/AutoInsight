@@ -208,6 +208,9 @@ def _handle_anomaly(state: AutoInsightState) -> dict:
             "sale_price":    a["features"]["sale_price"],
             "discount_pct":  a["features"]["discount_pct"],
             "listed_price":  a["features"]["listed_price"],
+            # All model features, so a reviewer can see why a sale stood out
+            "discount":      a["features"]["discount"],
+            "cost_price":    a["features"]["cost_price"],
             "score":         a["score"],
         }
         for a in result["anomalies"]

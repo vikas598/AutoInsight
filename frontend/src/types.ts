@@ -38,6 +38,34 @@ export interface Assessment {
   error?: string | null;
 }
 
+// ---- ML results (backend/app/agents/ml_agent.py) ----
+
+export interface ForecastSummary {
+  model: string;                  // e.g. "SARIMA(1,1,1)(1,1,1,12)" or "ARIMA(1,1,1)"
+  metric: "count" | "revenue";
+  horizon_months: number;
+  rmse: number;                   // in-sample RMSE, same unit as the metric
+  n_training: number;             // monthly points used to fit
+}
+
+export interface ClusterSummary {
+  k: number;
+  silhouette_score: number;
+  n_customers: number;
+  all_scores: Record<string, number>;   // silhouette per k tried
+}
+
+export interface AnomalySummary {
+  contamination: number;          // expected share of records flagged (model setting)
+  anomalies_found: number;
+  total_records: number;
+}
+
+export type MLResult =
+  | { technique: "forecast"; summary: ForecastSummary; chart_data: Record<string, unknown>[]; metrics: Record<string, number> }
+  | { technique: "cluster"; summary: ClusterSummary; chart_data: Record<string, unknown>[]; metrics: Record<string, number> }
+  | { technique: "anomaly"; summary: AnomalySummary; chart_data: Record<string, unknown>[]; metrics: Record<string, number> };
+
 export interface ChatResponse {
   session_id: string;
   status: ChatStatus;
@@ -47,6 +75,8 @@ export interface ChatResponse {
   query_result: QueryResult | null;
   chart_config: ChartConfig | null;
   assessment: Assessment | null;
+  /** Present for ML intents: the model's own summary and metrics. */
+  ml_result?: MLResult | null;
   error: string | null;
 }
 
