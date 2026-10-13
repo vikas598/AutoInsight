@@ -9,6 +9,7 @@ Routes:
     GET  /api/schema                       — introspected schema (for UI)
     GET  /api/audit?limit=N                — recent audit entries
     GET  /api/dashboard/overview?period=P  — Overview dashboard aggregates
+    GET  /api/approvals/pending            — writes paused awaiting approval
     POST /api/chat                         — send a query, get a response
     POST /api/approve/{session_id}         — approve or reject a pending write
     POST /api/report/{session_id}          — build a PDF of a session
@@ -32,6 +33,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.graph import build_graph
+from app.services.approval_queue import list_pending, pending_state, session_lock, thread_exists
 from app.services.audit_log import get_audit_logger
 from app.services.dashboard_service import get_overview
 from app.services.schema_service import get_schema_service
@@ -189,23 +191,61 @@ def api_approve(session_id: str, req: ApprovalRequest) -> ChatResponse:
 
     config = {"configurable": {"thread_id": session_id}}
 
-    # as_node="supervisor" so the resume routes through sql_agent (where
-    # _handle_approval lives) instead of auto-advancing to respond
-    try:
-        graph.update_state(
-            config,
-            {"approval_status": req.decision, "approved_by": req.approved_by},
-            as_node="supervisor",
-        )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"update_state error: {e}")
+    # Only resume a thread that is actually paused for approval, and only
+    # once. Without this, a repeated or late decision on a finished thread
+    # would route back through sql_agent with approval_status set and run
+    # the write again. The lock serialises concurrent decisions (e.g. the AI
+    # Analyst and the Action Center) for the same session.
+    with session_lock(session_id):
+        if pending_state(graph, session_id) is None:
+            if not thread_exists(graph, session_id):
+                raise HTTPException(status_code=404, detail="No conversation with this session id exists.")
+            raise HTTPException(
+                status_code=409,
+                detail="No change is awaiting approval in this session. It may already have been decided.",
+            )
 
-    try:
-        final = graph.invoke(None, config=config)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Resume error: {e}")
+        # as_node="supervisor" so the resume routes through sql_agent (where
+        # _handle_approval lives) instead of auto-advancing to respond
+        try:
+            graph.update_state(
+                config,
+                {"approval_status": req.decision, "approved_by": req.approved_by},
+                as_node="supervisor",
+            )
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"update_state error: {e}")
+
+        try:
+            final = graph.invoke(None, config=config)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Resume error: {e}")
 
     return _build_response(session_id, final)
+
+
+class PendingApproval(BaseModel):
+    session_id: str
+    proposed_at: Optional[str] = None
+    user_query: str = ""
+    summary: str = ""
+    assessment: dict
+
+
+class PendingApprovalsResponse(BaseModel):
+    pending: list[PendingApproval]
+    count: int
+
+
+@app.get("/api/approvals/pending", response_model=PendingApprovalsResponse)
+def api_pending_approvals() -> PendingApprovalsResponse:
+    """
+    Writes currently paused for a human decision, read directly from the
+    LangGraph checkpointer (no separate store). In-process memory: a restart
+    clears both the paused graphs and this list.
+    """
+    items = [PendingApproval(**i) for i in list_pending(graph)]
+    return PendingApprovalsResponse(pending=items, count=len(items))
 
 
 @app.post("/api/report/{session_id}")

@@ -1,7 +1,7 @@
 // API client — thin wrapper over fetch. Endpoints and payloads mirror
 // backend/app/api/main.py exactly; this layer only adds readable errors.
 
-import type { AuditEntry, ChatResponse, OverviewResponse, ReportInfo } from "./types";
+import type { AuditEntry, ChatResponse, OverviewResponse, PendingApproval, ReportInfo } from "./types";
 
 /** A failed request. `status` is 0 when the server could not be reached. */
 export class ApiError extends Error {
@@ -64,6 +64,10 @@ export const api = {
 
   audit: (limit: number, signal?: AbortSignal) =>
     request<{ entries: AuditEntry[]; count: number }>(`/api/audit?limit=${limit}`, { signal }),
+
+  /** Writes currently paused for a decision, across all sessions in this API process. */
+  pendingApprovals: (signal?: AbortSignal) =>
+    request<{ pending: PendingApproval[]; count: number }>("/api/approvals/pending", { signal }),
 };
 
 export function errorMessage(e: unknown): string {

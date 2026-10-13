@@ -42,7 +42,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
     id: "actions",
     label: "Action Center",
     icon: ShieldCheck,
-    description: "Approvals and the audit trail of data changes",
+    description: "Review AI-proposed data changes and their audit trail",
   },
   {
     id: "data",

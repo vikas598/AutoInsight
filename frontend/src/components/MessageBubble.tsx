@@ -139,6 +139,7 @@ function ResolvedProposal({ message }: { message: AssistantMessage }) {
       <span className="ml-auto text-xs font-medium text-ink-secondary">
         {message.decision === "approved" ? "You approved this change"
           : message.decision === "rejected" ? "You rejected this change"
+          : message.decision === "elsewhere" ? "Decided outside this conversation — see the Action Center audit log"
           : "Awaiting decision"}
       </span>
     </div>

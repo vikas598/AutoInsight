@@ -5,7 +5,8 @@
 import { Check, ShieldAlert, X } from "lucide-react";
 import { DataTable } from "./DataTable";
 import { Button } from "./ui/Button";
-import { humanize, plural } from "../lib/format";
+import { explainFactor, riskBand } from "../lib/actions";
+import { plural } from "../lib/format";
 import type { Assessment, Decision } from "../types";
 
 interface Props {
@@ -29,8 +30,10 @@ export function ApprovalCard({ assessment, onDecide, submitting, disabled, error
           preview_columns, preview_rows, affected_rows, sql } = assessment;
 
   // This card only appears for writes that require approval, so the badge is
-  // never shown as "safe": high risk is red, everything else amber.
+  // never shown as "safe": high risk is red, everything else amber — and the
+  // band is always spelled out in text, not conveyed by colour alone.
   const high = risk_score >= 70;
+  const band = riskBand(risk_score);
 
   return (
     <section
@@ -56,7 +59,7 @@ export function ApprovalCard({ assessment, onDecide, submitting, disabled, error
         <span className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold tabular-nums ${
           high ? "border-danger/30 bg-danger-soft text-danger" : "border-warning/30 bg-surface text-warning"
         }`}>
-          Risk {risk_score}/100{high ? " · high" : ""}
+          {band.label} · {risk_score}/100
         </span>
       </header>
 
@@ -70,15 +73,25 @@ export function ApprovalCard({ assessment, onDecide, submitting, disabled, error
 
         {Object.keys(risk_factors ?? {}).length > 0 && (
           <div>
-            <div className="eyebrow mb-1.5">Risk factors</div>
-            <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-              {Object.entries(risk_factors).map(([k, v]) => (
-                <div key={k} className="rounded-control border border-line bg-surface-sunken px-3 py-2">
-                  <dt className="text-2xs text-ink-muted">{humanize(k)}</dt>
-                  <dd className="text-sm font-semibold tabular-nums text-ink">+{v}</dd>
-                </div>
-              ))}
-            </dl>
+            <div className="eyebrow mb-1.5">Why it needs approval</div>
+            <ul className="divide-y divide-line/70 rounded-control border border-line">
+              {Object.entries(risk_factors).map(([k, v]) => {
+                const f = explainFactor(k, v, assessment);
+                return (
+                  <li key={k} className="flex items-start justify-between gap-3 px-3 py-2">
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium text-ink">{f.label}</div>
+                      {f.detail && <div className="text-xs text-ink-muted">{f.detail}</div>}
+                    </div>
+                    <div className="shrink-0 text-right text-sm font-semibold tabular-nums text-ink">
+                      +{v}
+                      {f.max !== undefined && <span className="ml-0.5 text-2xs font-normal text-ink-muted">/ {f.max}</span>}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+            <p className="mt-1.5 text-2xs text-ink-muted">The risk score is the sum of these points (0–100).</p>
           </div>
         )}
 

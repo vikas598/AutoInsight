@@ -93,8 +93,8 @@ export function isDimension(column: string): boolean {
   return DIMENSION_RE.test(column);
 }
 
-export function plural(n: number, word: string): string {
-  return `${int.format(n)} ${word}${n === 1 ? "" : "s"}`;
+export function plural(n: number, word: string, pluralWord = `${word}s`): string {
+  return `${int.format(n)} ${n === 1 ? word : pluralWord}`;
 }
 
 /** Headline INR value in Indian units: ₹36.06 Cr, ₹12.02 L, ₹48,500. */

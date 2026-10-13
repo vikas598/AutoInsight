@@ -9,9 +9,13 @@
 
 import { useCallback, useRef, useState } from "react";
 import { api, ApiError, errorMessage } from "../api";
-import type { AssistantMessage, Decision, Message } from "../types";
+import type { AssistantMessage, ChatResponse, Decision, Message } from "../types";
 
 type InFlight = null | { kind: "chat" } | { kind: "decision"; decision: Decision };
+
+export type DecisionResult =
+  | { ok: true; response: ChatResponse }
+  | { ok: false; message: string; alreadyDecided?: boolean };
 
 export type ExportState =
   | { status: "idle" }
@@ -73,8 +77,10 @@ export function useAnalystSession() {
     }
   }, [inFlight, pendingApprovalId, sessionId]);
 
-  const decide = useCallback(async (decision: Decision) => {
-    if (!pendingApprovalId || !sessionId || inFlight) return;
+  const decide = useCallback(async (decision: Decision): Promise<DecisionResult> => {
+    if (!pendingApprovalId || !sessionId || inFlight) {
+      return { ok: false, message: "No decision can be submitted right now." };
+    }
 
     const run = epoch.current;
     const proposalId = pendingApprovalId;
@@ -83,19 +89,29 @@ export function useAnalystSession() {
 
     try {
       const res = await api.approve(sessionId, decision);
-      if (run !== epoch.current) return;
+      if (run !== epoch.current) return { ok: false, message: "The conversation was reset." };
       // Only now — with the server's answer in hand — is the proposal resolved
       setMessages((m) => [
         ...m.map((msg) => (msg.id === proposalId ? { ...msg, decision } : msg)),
         { id: newId(), role: "assistant", response: res, answersDecision: decision },
       ]);
       setPendingApprovalId(null);
+      return { ok: true, response: res };
     } catch (e) {
-      if (run !== epoch.current) return;
+      if (run !== epoch.current) return { ok: false, message: "The conversation was reset." };
+      if (e instanceof ApiError && e.status === 409) {
+        // The server says nothing is awaiting a decision any more (decided
+        // elsewhere, e.g. in the Action Center). Stop waiting; the outcome is
+        // in the audit log, not known here.
+        setMessages((m) => m.map((msg) => (msg.id === proposalId ? { ...msg, decision: "elsewhere" } : msg)));
+        setPendingApprovalId(null);
+        return { ok: false, message: e.message, alreadyDecided: true };
+      }
       setApprovalError(
         `${errorMessage(e)} Your decision was not confirmed by the server. ` +
         "If you try again, first check that the change has not already been applied.",
       );
+      return { ok: false, message: errorMessage(e) };
     } finally {
       if (run === epoch.current) setInFlight(null);
     }

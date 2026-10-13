@@ -101,8 +101,10 @@ export interface AssistantMessage {
   id: string;
   role: "assistant";
   response: ChatResponse;
-  /** For approval proposals: the decision the server confirmed receiving. */
-  decision?: Decision;
+  /** For approval proposals: the decision the server confirmed receiving,
+   *  or "elsewhere" when the server reports it was decided outside this
+   *  conversation (outcome then lives in the audit log). */
+  decision?: Decision | "elsewhere";
   /** For the server's reply to a decision: which decision it answers. */
   answersDecision?: Decision;
 }
@@ -165,9 +167,23 @@ export interface AuditEntry {
   operation: string;
   target_table: string;
   risk_score: number;
+  risk_factors?: Record<string, number>;
   affected_rows: number;
   decision: AuditDecision | string;
   executed: boolean;
   approved_by: string | null;
   error: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Approval queue — GET /api/approvals/pending
+// (read from the LangGraph checkpointer; in-process, cleared by a restart)
+// ---------------------------------------------------------------------------
+
+export interface PendingApproval {
+  session_id: string;
+  proposed_at: string | null;
+  user_query: string;
+  summary: string;
+  assessment: Assessment;
 }
