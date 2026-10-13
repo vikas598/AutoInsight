@@ -8,6 +8,7 @@ Routes:
     GET  /api/health                       — liveness check
     GET  /api/schema                       — introspected schema (for UI)
     GET  /api/audit?limit=N                — recent audit entries
+    GET  /api/dashboard/overview?period=P  — Overview dashboard aggregates
     POST /api/chat                         — send a query, get a response
     POST /api/approve/{session_id}         — approve or reject a pending write
     POST /api/report/{session_id}          — build a PDF of a session
@@ -24,13 +25,15 @@ import uuid
 from pathlib import Path
 from typing import Any, Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.graph import build_graph
 from app.services.audit_log import get_audit_logger
+from app.services.dashboard_service import get_overview
 from app.services.schema_service import get_schema_service
 from app.services.visualization_service import get_visualization_service
 from app.state import new_state
@@ -139,6 +142,23 @@ def api_audit(limit: int = 20) -> dict:
     """Return the most recent write-path audit entries."""
     entries = get_audit_logger().tail(min(max(1, limit), 200))
     return {"entries": entries, "count": len(entries)}
+
+
+@app.get("/api/dashboard/overview")
+def api_dashboard_overview(
+    period: Optional[str] = Query(
+        None,
+        max_length=8,
+        description="A calendar year with sales (e.g. '2024') or 'all'. Defaults to the latest year with sales.",
+    ),
+) -> dict:
+    """Read-only, deterministic aggregates for the Overview dashboard."""
+    try:
+        return get_overview(period)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except SQLAlchemyError:
+        raise HTTPException(status_code=503, detail="The database is unavailable.")
 
 
 @app.post("/api/chat", response_model=ChatResponse)

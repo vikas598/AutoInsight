@@ -1,111 +1,104 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* -------------------------------------------------------------------------
+   Design tokens — the single source of truth for colour, radius, shadow and
+   layout. tailwind.config.js maps utility names onto these variables.
+   Colours are RGB channels so Tailwind opacity modifiers work.
+   ------------------------------------------------------------------------- */
 :root {
-  --text: #6b6375;
-  --text-h: #08060d;
-  --bg: #fff;
-  --border: #e5e4e7;
-  --code-bg: #f4f3ec;
-  --accent: #aa3bff;
-  --accent-bg: rgba(170, 59, 255, 0.1);
-  --accent-border: rgba(170, 59, 255, 0.5);
-  --social-bg: rgba(244, 243, 236, 0.5);
-  --shadow:
-    rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
+  /* Navy — sidebar and dark chrome */
+  --color-navy-950: 11 18 38;      /* #0b1226 sidebar background */
+  --color-navy-900: 17 27 54;      /* #111b36 hover */
+  --color-navy-800: 28 41 77;      /* #1c294d active item */
+  --color-navy-700: 44 60 102;     /* #2c3c66 dividers */
+  --color-navy-300: 148 163 196;   /* #94a3c4 secondary text on navy */
+  --color-navy-100: 226 232 244;   /* #e2e8f4 primary text on navy */
 
-  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --mono: ui-monospace, Consolas, monospace;
+  /* Surfaces */
+  --color-canvas: 245 247 251;         /* #f5f7fb app background */
+  --color-surface: 255 255 255;        /* cards */
+  --color-surface-raised: 255 255 255; /* menus, drawers — paired with shadow-raised */
+  --color-surface-sunken: 241 244 249; /* table headers, wells */
 
-  font: 18px/145% var(--sans);
-  letter-spacing: 0.18px;
-  color-scheme: light dark;
-  color: var(--text);
-  background: var(--bg);
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  /* Text */
+  --color-ink: 15 23 42;               /* #0f172a */
+  --color-ink-secondary: 71 85 105;    /* #475569 */
+  --color-ink-muted: 100 116 139;      /* #64748b — 4.7:1 on white */
 
-  @media (max-width: 1024px) {
-    font-size: 16px;
+  /* Borders */
+  --color-line: 226 232 240;           /* #e2e8f0 */
+  --color-line-strong: 203 213 225;    /* #cbd5e1 */
+
+  /* Actions */
+  --color-primary: 37 99 235;          /* #2563eb */
+  --color-primary-hover: 29 78 216;    /* #1d4ed8 */
+  --color-primary-soft: 239 246 255;   /* #eff6ff */
+  --color-focus: 59 130 246;           /* #3b82f6 */
+
+  /* Status */
+  --color-success: 5 150 105;          /* #059669 */
+  --color-success-soft: 236 253 245;
+  --color-warning: 180 83 9;           /* #b45309 */
+  --color-warning-soft: 255 251 235;
+  --color-danger: 220 38 38;           /* #dc2626 */
+  --color-danger-soft: 254 242 242;
+
+  /* Radius */
+  --radius-control: 0.5rem;   /* buttons, inputs */
+  --radius-card: 0.75rem;     /* cards, panels */
+
+  /* Elevation — kept deliberately light */
+  --shadow-card: 0 1px 2px rgb(15 23 42 / 0.04), 0 1px 3px rgb(15 23 42 / 0.05);
+  --shadow-raised: 0 4px 12px rgb(15 23 42 / 0.08), 0 1px 3px rgb(15 23 42 / 0.06);
+  --shadow-overlay: 0 16px 40px rgb(11 18 38 / 0.24);
+
+  /* Layout */
+  --layout-sidebar-width: 248px;
+  --layout-topbar-height: 64px;
+  --layout-content-max: 72rem;
+}
+
+@layer base {
+  html, body, #root { height: 100%; }
+
+  body {
+    @apply bg-canvas font-sans text-sm text-ink antialiased;
+    font-feature-settings: "cv11", "ss01";
+  }
+
+  code, pre, kbd { @apply font-mono; }
+}
+
+@layer components {
+  /* Consistent keyboard focus indicator. Mouse clicks don't show it. */
+  .focus-ring {
+    @apply focus:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-canvas;
+  }
+  .focus-ring-navy {
+    @apply focus:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-navy-950;
+  }
+
+  .card {
+    @apply rounded-card border border-line bg-surface shadow-card;
+  }
+
+  .eyebrow {
+    @apply text-2xs font-semibold uppercase tracking-wider text-ink-muted;
   }
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --text: #9ca3af;
-    --text-h: #f3f4f6;
-    --bg: #16171d;
-    --border: #2e303a;
-    --code-bg: #1f2028;
-    --accent: #c084fc;
-    --accent-bg: rgba(192, 132, 252, 0.15);
-    --accent-border: rgba(192, 132, 252, 0.5);
-    --social-bg: rgba(47, 48, 58, 0.5);
-    --shadow:
-      rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
-  }
-
-  #social .button-icon {
-    filter: invert(1) brightness(2);
-  }
+@layer utilities {
+  /* Horizontally scrollable rows (chips) without a visible scrollbar */
+  .scrollbar-none { scrollbar-width: none; }
+  .scrollbar-none::-webkit-scrollbar { display: none; }
 }
 
-body {
-  margin: 0;
-}
+/* Smooth scroll in the chat */
+.chat-scroll { scroll-behavior: smooth; }
 
-#root {
-  width: 1126px;
-  max-width: 100%;
-  margin: 0 auto;
-  text-align: center;
-  border-inline: 1px solid var(--border);
-  min-height: 100svh;
-  display: flex;
-  flex-direction: column;
-  box-sizing: border-box;
-}
-
-h1,
-h2 {
-  font-family: var(--heading);
-  font-weight: 500;
-  color: var(--text-h);
-}
-
-h1 {
-  font-size: 56px;
-  letter-spacing: -1.68px;
-  margin: 32px 0;
-  @media (max-width: 1024px) {
-    font-size: 36px;
-    margin: 20px 0;
-  }
-}
-h2 {
-  font-size: 24px;
-  line-height: 118%;
-  letter-spacing: -0.24px;
-  margin: 0 0 8px;
-  @media (max-width: 1024px) {
-    font-size: 20px;
-  }
-}
-p {
-  margin: 0;
-}
-
-code,
-.counter {
-  font-family: var(--mono);
-  display: inline-flex;
-  border-radius: 4px;
-  color: var(--text-h);
-}
-
-code {
-  font-size: 15px;
-  line-height: 135%;
-  padding: 4px 8px;
-  background: var(--code-bg);
+@media (prefers-reduced-motion: reduce) {
+  .chat-scroll { scroll-behavior: auto; }
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
